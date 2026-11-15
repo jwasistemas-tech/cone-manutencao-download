@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Baixar o Cone Manutenção</title>
+<link rel="icon" href="icone.png">
+<style>
+  :root { --azul: #15315B; --laranja: #E8790F; --laranja-escuro: #B45309; --fundo: #F3F5F8; --borda: #DDE2E9; --campo: #9CA3AF; --texto: #111827; --texto-2: #4B5563; --ok: #15803D; --erro: #B91C1C; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 15px; color: var(--texto); background: var(--fundo); }
+  header { background: var(--azul); color: #fff; padding: 16px; display: flex; align-items: center; gap: 12px; }
+  header img { height: 28px; }
+  header span { font-weight: 600; color: #C9D3E3; }
+  main { max-width: 600px; margin: 24px auto; padding: 0 16px; }
+  .cartao { background: #fff; border: 1px solid var(--borda); border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+  h1 { margin: 0; font-size: 22px; }
+  p { margin: 0; line-height: 1.5; }
+  .secundario { color: var(--texto-2); }
+  label { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
+  input { min-height: 48px; padding: 0 12px; border: 1px solid var(--campo); border-radius: 8px; font: inherit; }
+  input:focus-visible, button:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
+  button { min-height: 48px; padding: 0 24px; border: 0; border-radius: 8px; background: var(--laranja-escuro); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  button:hover:not(:disabled) { background: #92400E; }
+  button:disabled { opacity: 0.6; cursor: default; }
+  progress { width: 100%; height: 16px; accent-color: var(--laranja); }
+  .ok { color: var(--ok); font-weight: 700; }
+  .erro { color: var(--erro); font-weight: 700; }
+  ol { margin: 0; padding-left: 20px; line-height: 1.6; }
+  footer { text-align: center; color: var(--texto-2); font-size: 12px; margin: 24px 0; }
+</style>
+</head>
+<body>
+<header><img src="cone-logo-branca.png" alt="Cone"><span>Manutenção</span></header>
+<main>
+  <form class="cartao" id="form" autocomplete="off">
+    <h1>Baixar o programa Cone Manutenção</h1>
+    <p id="versao" class="secundario">Procurando a versão mais nova…</p>
+    <label for="senha">Senha de download
+      <input id="senha" type="password" required autocomplete="current-password" aria-describedby="situacao">
+    </label>
+    <button id="baixar" type="submit">Baixar o instalador</button>
+    <progress id="barra" max="100" value="0" hidden></progress>
+    <p id="situacao" role="status" aria-live="polite"></p>
+    <ol class="secundario">
+      <li>Feche o Cone Manutenção, se estiver aberto.</li>
+      <li>Abra o arquivo baixado (<b>Cone-Manutencao-Instalador-…exe</b>). Se o Windows avisar, clique em <b>Mais informações › Executar assim mesmo</b>.</li>
+      <li>Os dados ficam no computador e não são apagados ao instalar uma versão nova.</li>
+    </ol>
+  </form>
+</main>
+<footer>Desenvolvido por JWA Sistemas</footer>
+<script>
+// A senha vai só para a função da nuvem, que devolve links temporários (10 min) de cada parte do instalador.
+// A página confere o SHA-256 de cada parte e do arquivo inteiro antes de entregar.
+const FUNCAO = "https://svqhjcmdjxubemfvmfys.supabase.co/functions/v1/instalador";
+const CHAVE = "sb_publishable_Fv8nTsktJ6qccc3_Y4KlSQ_nZuOD3Yc"; // chave pública (não dá acesso a nada sem a senha)
+const $ = (id) => document.getElementById(id);
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+const mb = (n) => (n / 1048576).toFixed(0) + " MB";
+const chamar = (corpo) => fetch(FUNCAO, { method: "POST", headers: { "Content-Type": "application/json", apikey: CHAVE }, body: JSON.stringify(corpo) })
+  .then(async (r) => ({ ok: r.ok, status: r.status, j: await r.json().catch(() => ({})) }));
+function aviso(texto, classe) { const s = $("situacao"); s.textContent = ""; const b = document.createElement("span"); if (classe) b.className = classe; b.textContent = texto; s.appendChild(b); }
+
+chamar({ acao: "versao" }).then(({ ok, j }) => {
+  $("versao").textContent = ok ? "Versão " + j.versao + " · " + mb(j.tamanho) : "Nenhuma versão publicada ainda.";
+}).catch(() => { $("versao").textContent = "Sem conexão com a nuvem agora. Tente de novo em instantes."; });
+
+$("form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  $("baixar").disabled = true;
+  try {
+    aviso("Conferindo a senha…");
+    const { ok, j } = await chamar({ acao: "baixar", senha: $("senha").value });
+    if (!ok) throw new Error(j.erro || "não autorizado");
+    $("senha").value = "";
+    $("barra").hidden = false; $("barra").value = 0;
+    const pedacos = []; let recebido = 0;
+    for (const [i, parte] of j.partes.entries()) {
+      aviso("Baixando parte " + (i + 1) + " de " + j.partes.length + "…");
+      const r = await fetch(parte.url, { cache: "no-store" });
+      if (!r.ok || !r.body) throw new Error("a parte " + (i + 1) + " respondeu " + r.status);
+      const leitor = r.body.getReader(); const blocos = [];
+      for (;;) {
+        const { done, value } = await leitor.read();
+        if (done) break;
+        blocos.push(value); recebido += value.length;
+        $("barra").value = Math.min(99, Math.floor((recebido / j.tamanho) * 100));
+      }
+      const dados = await new Blob(blocos).arrayBuffer();
+      if (hex(await crypto.subtle.digest("SHA-256", dados)) !== parte.sha256) throw new Error("a parte " + (i + 1) + " veio corrompida; tente de novo");
+      pedacos.push(dados);
+    }
+    aviso("Conferindo o arquivo…");
+    const inteiro = new Blob(pedacos, { type: "application/octet-stream" });
+    if (hex(await crypto.subtle.digest("SHA-256", await inteiro.arrayBuffer())) !== j.sha256) throw new Error("o arquivo não confere; tente de novo");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(inteiro); a.download = j.nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    $("barra").value = 100;
+    aviso("Pronto: " + j.nome + " baixado e conferido. Agora siga os passos abaixo.", "ok");
+  } catch (e) {
+    aviso("Não baixou: " + e.message, "erro");
+  } finally {
+    $("baixar").disabled = false;
+  }
+});
+</script>
+</body>
+</html>
