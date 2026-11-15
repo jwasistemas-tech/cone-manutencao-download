@@ -20,6 +20,11 @@
   .secundario { color: var(--texto-2); }
   label { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
   input { min-height: 48px; padding: 0 12px; border: 1px solid var(--campo); border-radius: 8px; font: inherit; }
+  .campo-senha { position: relative; display: block; }
+  .campo-senha input { width: 100%; padding-right: 52px; }
+  .campo-senha input::-ms-reveal { display: none; }
+  .olho { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); min-height: 0; width: 44px; height: 40px; padding: 0; display: grid; place-items: center; background: none; color: var(--texto-2); border-radius: 6px; }
+  .olho:hover:not(:disabled) { background: #EEF2F8; color: var(--azul); }
   input:focus-visible, button:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
   button { min-height: 48px; padding: 0 24px; border: 0; border-radius: 8px; background: var(--laranja-escuro); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
   button:hover:not(:disabled) { background: #92400E; }
@@ -38,7 +43,10 @@
     <h1>Baixar o programa Cone Manutenção</h1>
     <p id="versao" class="secundario">Procurando a versão mais nova…</p>
     <label for="senha">Senha de download
-      <input id="senha" type="password" required autocomplete="current-password" aria-describedby="situacao">
+      <span class="campo-senha">
+        <input id="senha" name="senha" type="password" required autocomplete="current-password" spellcheck="false" autocapitalize="off" aria-describedby="situacao">
+        <button type="button" id="olho" class="olho" aria-pressed="false" aria-label="Mostrar senha" title="Mostrar senha"></button>
+      </span>
     </label>
     <button id="baixar" type="submit">Baixar o instalador</button>
     <progress id="barra" max="100" value="0" hidden></progress>
@@ -61,6 +69,17 @@ const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart
 const mb = (n) => (n / 1048576).toFixed(0) + " MB";
 const chamar = (corpo) => fetch(FUNCAO, { method: "POST", headers: { "Content-Type": "application/json", apikey: CHAVE }, body: JSON.stringify(corpo) })
   .then(async (r) => ({ ok: r.ok, status: r.status, j: await r.json().catch(() => ({})) }));
+const OLHO = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const OLHO_FECHADO = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6A17.4 17.4 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg>';
+function mostrarSenha(sim) {
+  $("senha").type = sim ? "text" : "password";
+  $("olho").innerHTML = sim ? OLHO_FECHADO : OLHO;
+  $("olho").setAttribute("aria-pressed", String(sim));
+  const t = sim ? "Ocultar senha" : "Mostrar senha";
+  $("olho").setAttribute("aria-label", t); $("olho").title = t;
+}
+mostrarSenha(false);
+$("olho").addEventListener("click", () => mostrarSenha($("senha").type === "password"));
 function aviso(texto, classe) { const s = $("situacao"); s.textContent = ""; const b = document.createElement("span"); if (classe) b.className = classe; b.textContent = texto; s.appendChild(b); }
 
 chamar({ acao: "versao" }).then(({ ok, j }) => {
@@ -74,7 +93,7 @@ $("form").addEventListener("submit", async (ev) => {
     aviso("Conferindo a senha…");
     const { ok, j } = await chamar({ acao: "baixar", senha: $("senha").value });
     if (!ok) throw new Error(j.erro || "não autorizado");
-    $("senha").value = "";
+    $("senha").value = ""; mostrarSenha(false);
     $("barra").hidden = false; $("barra").value = 0;
     const pedacos = []; let recebido = 0;
     for (const [i, parte] of j.partes.entries()) {
